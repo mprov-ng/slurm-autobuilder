@@ -36,8 +36,8 @@ cd ..
 # patch pmix build req in spec.
 cat slurm.spec | sed -e 's/BuildRequires: pmix/BuildRequires: pmix\nBuildRequires: pmix-devel/' > slurm-new.spec
 mv slurm-new.spec slurm.spec
-VERSION=`cat slurm.spec  | grep ^Version | awk '{print $2}'`
-RELEASE=`cat slurm.spec  | egrep "\%def.*rel" | awk '{print $3}'`
+VERSION=`cat slurm.spec  | grep ^Version | awk '{print $2}'| head -n1 `
+RELEASE=`cat slurm.spec  | egrep "\%def.*rel" | awk '{print $3}'| head -n1`
 if [ "$RELEASE" == "1" ]
 then
   RELEASE=""
@@ -65,10 +65,10 @@ tar -jcf slurm-${VERSION}${RELEASE}.tar.bz2 slurm-${VERSION}${RELEASE}
 
 rm -rf slurm-${VERSION}${RELEASE}
 
-git add .
-git config --global user.name "Auto User"
-git config --global user.email "mprov@jhu.edu"
+# git add .
+# git config --global user.name "Auto User"
+# git config --global user.email "mprov@jhu.edu"
 
-git commit -am "Automated build of slurm $TAG"
-git push
+# git commit -am "Automated build of slurm $TAG"
+# git push
 
