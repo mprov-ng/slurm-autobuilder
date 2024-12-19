@@ -61,10 +61,9 @@ tar -jcf slurm-${VERSION}${RELEASE}.tar.bz2 slurm-${VERSION}${RELEASE}
 
 rm -rf slurm-${VERSION}${RELEASE}
 
-git add . 
 git config --global user.name "Auto User"
 git config --global user.email "mprov@jhu.edu"
 
 git commit -am "Automated build of slurm $TAG"
-git push 
+git push origin main
 
