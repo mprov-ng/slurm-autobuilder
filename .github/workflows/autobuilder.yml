@@ -1,9 +1,10 @@
 name: Autobuild on copr.
 on:
   schedule:
-    - cron: "00/10 * * *"
+    - cron: "00/10 * * * *"
 jobs:
   build:
+    runs-on: ubuntu-latest
     - 
       name: Checkout repo
       uses: actions/checkout@v3
