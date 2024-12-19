@@ -36,6 +36,11 @@ cd ..
 # patch pmix build req in spec.
 cat slurm.spec | sed -e 's/BuildRequires: pmix/BuildRequires: pmix\nBuildRequires: pmix-devel/' > slurm-new.spec
 mv slurm-new.spec slurm.spec
+
+# patch libcurl4 back to libcurl
+cat slurm.spec | sed -e 's/Requires: libcurl4/Requires: libcurl/' > slurm-new.spec
+mv slurm-new.spec slurm.spec
+
 VERSION=`cat slurm.spec  | grep ^Version | awk '{print $2}'| head -n1 `
 RELEASE=`cat slurm.spec  | egrep "\%def.*rel" | awk '{print $3}'| head -n1`
 if [ "$RELEASE" == "1" ]
