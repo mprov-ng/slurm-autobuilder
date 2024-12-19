@@ -3,6 +3,7 @@
 rm -rf slurm* 
 
 # force a checkout of main to make sure we are on main before we do anything
+git fetch --all
 git checkout main
 
 git clone https://github.com/SchedMD/slurm
