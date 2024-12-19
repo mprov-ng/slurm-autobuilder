@@ -9,7 +9,18 @@ cd slurm/
 if [ "$1" == "" ]
 then
   TAG=`git tag -l | sort -V | grep -v "start" | egrep -v "rc[0-9]?" | egrep -v "pre[0-9]?" | tail -n1`
+  LAST_TAG=`cat ../last_tag`
+  if [ "$LAST_TAG" == "$TAG" ]
+  then
+    # no need to submit a new build, the last tag and current tag are the same.
+    echo "No new build required."
+    rm -rf slurm/
+    exit 0
+  fi
+  echo -n $TAG > ../last_tag
+
 else
+  # a custom tag has been requested.
   TAG=$1
 fi
 
@@ -50,10 +61,10 @@ tar -jcf slurm-${VERSION}${RELEASE}.tar.bz2 slurm-${VERSION}${RELEASE}
 
 rm -rf slurm-${VERSION}${RELEASE}
 
-git add . 
-git config --global user.name "Auto User"
-git config --global user.email "mprov@jhu.edu"
+# git add . 
+# git config --global user.name "Auto User"
+# git config --global user.email "mprov@jhu.edu"
 
-git commit -am "Automated build of slurm $TAG"
-git push 
+# git commit -am "Automated build of slurm $TAG"
+# git push 
 
