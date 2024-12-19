@@ -2,6 +2,9 @@
 
 rm -rf slurm* 
 
+# force a checkout of main to make sure we are on main before we do anything
+git checkout main
+
 git clone https://github.com/SchedMD/slurm
 
 cd slurm/
@@ -66,5 +69,5 @@ git config --global user.name "Auto User"
 git config --global user.email "mprov@jhu.edu"
 
 git commit -am "Automated build of slurm $TAG"
-git push origin main
+git push
 
