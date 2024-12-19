@@ -1,7 +1,10 @@
 Name:		slurm
-Version:	23.02.6
+Version:	24.11.0
 %define rel	1
-Release:	%{rel}%{?dist}
+%if %{defined patch} && %{undefined extraver}
+%define extraver .patched
+%endif
+Release:	%{rel}%{?extraver}%{?dist}
 Summary:	Slurm Workload Manager
 
 Group:		System Environment/Base
@@ -16,53 +19,60 @@ URL:		https://slurm.schedmd.com/
 %endif
 
 Source:		%{slurm_source_dir}.tar.bz2
+%{lua: local patchnum=0
+  for pfile in string.gmatch(rpm.expand("%{?patch}"), "%S+") do
+    print('Patch'..patchnum..':\t'..pfile..'\n')
+    patchnum=patchnum+1
+  end
+}
 
 # build options		.rpmmacros options	change to default action
 # ====================  ====================	========================
 # --prefix		%_prefix path		install path for commands, libraries, etc.
-# --with cray		%_with_cray 1		build for a Cray Aries system
-# --with cray_network	%_with_cray_network 1	build for a non-Cray system with a Cray network
 # --with cray_shasta	%_with_cray_shasta 1	build for a Cray Shasta system
 # --with slurmrestd	%_with_slurmrestd 1	build slurmrestd
-# --with slurmsmwd      %_with_slurmsmwd 1      build slurmsmwd
+# --with yaml		%_with_yaml 1		build with yaml serializer
 # --without debug	%_without_debug 1	don't compile with debugging symbols
 # --with hdf5		%_with_hdf5 path	require hdf5 support
 # --with hwloc		%_with_hwloc 1		require hwloc support
+# --with libcurl	%_with_libcurl 1	require libcurl support
 # --with lua		%_with_lua path		build Slurm lua bindings
-# --with mysql		%_with_mysql 1		require mysql/mariadb support
+# --without munge	%_without_munge 1	disable support for munge
 # --with numa		%_with_numa 1		require NUMA support
 # --without pam		%_without_pam 1		don't require pam-devel RPM to be installed
 # --without x11		%_without_x11 1		disable internal X11 support
 # --with ucx		%_with_ucx path		require ucx support
-# --with pmix		%_with_pmix path	require pmix support
+# --with pmix		%_with_pmix path	build with pmix support
 # --with nvml		%_with_nvml path	require nvml support
 # --with jwt		%_with_jwt 1		require jwt support
+# --with freeipmi	%_with_freeipmi 1	require freeipmi support
+# --with selinux	%_with_selinux 1	build with selinux support
 #
 
 #  Options that are off by default (enable with --with <opt>)
-%bcond_with cray
-%bcond_with cray_network
 %bcond_with cray_shasta
 %bcond_with slurmrestd
-%bcond_with slurmsmwd
 %bcond_with multiple_slurmd
+%bcond_with pmix
 %bcond_with ucx
 
 # These options are only here to force there to be these on the build.
 # If they are not set they will still be compiled if the packages exist.
 %bcond_with hwloc
-%bcond_with mysql
 %bcond_with hdf5
+%bcond_with libcurl
 %bcond_with lua
 %bcond_with numa
-%bcond_with pmix
 %bcond_with nvml
 %bcond_with jwt
+%bcond_with yaml
+%bcond_with freeipmi
 
 # Use debug by default on all systems
 %bcond_without debug
 
 # Options enabled by default
+%bcond_without munge
 %bcond_without pam
 %bcond_without x11
 
@@ -74,11 +84,29 @@ Source:		%{slurm_source_dir}.tar.bz2
 # Disable Link Time Optimization (LTO)
 %define _lto_cflags %{nil}
 
+BuildRequires:  autoconf
+BuildRequires:  automake
+BuildRequires:  gcc
+BuildRequires:  make
+%if %{defined suse_version}
+BuildRequires: pkg-config
+%else
+%if (0%{?rhel} != 7)
+BuildRequires:  pkgconf
+%else
+BuildRequires:  pkgconfig
+%endif
+%endif
+
+%if %{with munge}
 Requires: munge
+BuildRequires: munge-devel munge-libs
+%endif
+
+Requires: bash-completion
 
 %{?systemd_requires}
 BuildRequires: systemd
-BuildRequires: munge-devel munge-libs
 BuildRequires: python3
 BuildRequires: readline-devel
 Obsoletes: slurm-lua <= %{version}
@@ -88,48 +116,51 @@ Obsoletes: slurm-plugins <= %{version}
 # fake systemd support when building rpms on other platforms
 %{!?_unitdir: %global _unitdir /lib/systemd/systemd}
 
-%define use_mysql_devel %(perl -e '`rpm -q mariadb-devel`; print $?;')
+%define use_mysql_devel %(perl -e '`rpm -q mysql-devel`; print !$?;')
+# Default for OpenSUSE/SLES builds
+%define use_libmariadb_devel %(perl -e '`rpm -q libmariadb-devel`; print !$?;')
+# Package name from the official MariaDB version
+%define use_MariaDB_devel %(perl -e '`rpm -q MariaDB-devel`; print !$?;')
+# Oracle mysql community
+%define use_mysql_community %(perl -e '`rpm -q mysql-community-devel`; print !$?;')
+# Oracle mysql commercial
+%define use_mysql_commercial %(perl -e '`rpm -q mysql-commercial-devel`; print !$?;')
 
-%if %{with mysql}
-%if %{use_mysql_devel}
+%if 0%{?use_mysql_devel}
 BuildRequires: mysql-devel >= 5.0.0
+%else
+%if 0%{?use_mysql_community}
+BuildRequires: mysql-community-devel >= 5.0.0
+%else
+%if 0%{?use_mysql_commercial}
+BuildRequires: mysql-commercial-devel >= 5.0.0
+%else
+%if 0%{?use_libmariadb_devel}
+# OpenSUSE/SLES has a different versioning scheme, so skip the version check
+BuildRequires: libmariadb-devel
+%else
+%if 0%{?use_MariaDB_devel}
+BuildRequires: MariaDB-devel >= 5.0.0
 %else
 BuildRequires: mariadb-devel >= 5.0.0
 %endif
 %endif
-
-%if %{with cray}
-BuildRequires: cray-libalpscomm_cn-devel
-BuildRequires: cray-libalpscomm_sn-devel
-BuildRequires: libnuma-devel
-BuildRequires: libhwloc-devel
-BuildRequires: cray-libjob-devel
-BuildRequires: gtk2-devel
-BuildRequires: glib2-devel
-BuildRequires: pkg-config
 %endif
-
-%if %{with cray_network}
-%if %{use_mysql_devel}
-BuildRequires: mysql-devel
-%else
-BuildRequires: mariadb-devel
 %endif
-BuildRequires: cray-libalpscomm_cn-devel
-BuildRequires: cray-libalpscomm_sn-devel
-BuildRequires: hwloc-devel
-BuildRequires: gtk2-devel
-BuildRequires: glib2-devel
-BuildRequires: pkgconfig
 %endif
 
 BuildRequires: perl(ExtUtils::MakeMaker)
+%if %{defined suse_version}
+BuildRequires: perl
+%else
+BuildRequires: perl-devel
+%endif
 
 %if %{with lua}
 BuildRequires: pkgconfig(lua) >= 5.1.0
 %endif
 
-%if %{with hwloc}
+%if %{with hwloc} && "%{_with_hwloc}" == "--with-hwloc"
 BuildRequires: hwloc-devel
 %endif
 
@@ -152,9 +183,33 @@ BuildRequires: ucx-devel
 %global ucx_version %(rpm -q ucx-devel --qf "%{RPMTAG_VERSION}")
 %endif
 
+%if %{with libcurl}
+%if %{defined suse_version}
+Requires: libcurl
+%else
+Requires: libcurl4
+%endif
+BuildRequires: libcurl-devel
+%endif
+
 %if %{with jwt}
 BuildRequires: libjwt-devel >= 1.10.0
 Requires: libjwt >= 1.10.0
+%endif
+
+%if %{with yaml}
+Requires: libyaml >= 0.2.5
+BuildRequires: libyaml-devel >= 0.2.5
+%endif
+
+%if %{with freeipmi}
+Requires: freeipmi
+BuildRequires: freeipmi-devel
+%endif
+
+%if %{with selinux}
+Requires: libselinux
+BuildRequires: libselinux-devel
 %endif
 
 #  Allow override of sysconfdir via _slurm_sysconfdir.
@@ -229,10 +284,24 @@ Group: Development/System
 %description example-configs
 Example configuration files for Slurm.
 
+%package sackd
+Summary: Slurm authentication daemon
+Group: System Environment/Base
+Requires: %{name}%{?_isa} = %{version}-%{release}
+%description sackd
+Slurm authentication daemon. Used on login nodes that are not running slurmd
+daemons to allow authentication to the cluster.
+
 %package slurmctld
 Summary: Slurm controller daemon
 Group: System Environment/Base
 Requires: %{name}%{?_isa} = %{version}-%{release}
+%if %{with pmix} && "%{_with_pmix}" == "--with-pmix"
+Requires: pmix = %{pmix_version}
+%endif
+%if %{with ucx} && "%{_with_ucx}" == "--with-ucx"
+Requires: ucx = %{ucx_version}
+%endif
 %description slurmctld
 Slurm controller daemon. Used to manage the job queue, schedule jobs,
 and dispatch RPC messages to the slurmd processon the compute nodes
@@ -331,40 +400,37 @@ BuildRequires: json-c-devel
 Provides a REST interface to Slurm.
 %endif
 
-%if %{with slurmsmwd}
-%package slurmsmwd
-Summary: support daemons and software for the Cray SMW
-Group: System Environment/Base
-Requires: %{name}%{?_isa} = %{version}-%{release}
-%description slurmsmwd
-support daemons and software for the Cray SMW.  Includes slurmsmwd which
-notifies slurm about failed nodes.
-%endif
-
 #############################################################################
 
 %prep
 # when the rel number is one, the tarball filename does not include it
 %setup -n %{slurm_source_dir}
+%global _default_patch_fuzz 2
+%autopatch -p1
 
 %build
 %configure \
+	--with-systemdsystemunitdir=%{_unitdir} \
+	--enable-pkgconfig \
 	%{?_without_debug:--disable-debug} \
 	%{?_with_pam_dir} \
-	%{?_with_cpusetdir} \
 	%{?_with_mysql_config} \
-	%{?_without_cray:--enable-really-no-cray}\
-	%{?_with_cray_network:--enable-cray-network}\
 	%{?_with_multiple_slurmd:--enable-multiple-slurmd} \
+	%{?_with_selinux:--enable-selinux} \
 	%{?_with_pmix} \
 	%{?_with_freeipmi} \
 	%{?_with_hdf5} \
+	%{?_with_hwloc} \
 	%{?_with_shared_libslurm} \
 	%{!?_with_slurmrestd:--disable-slurmrestd} \
 	%{?_without_x11:--disable-x11} \
+	%{?_with_libcurl} \
 	%{?_with_ucx} \
 	%{?_with_jwt} \
+	%{?_with_yaml} \
 	%{?_with_nvml} \
+	%{?_with_freeipmi} \
+	%{!?with_munge:--without-munge} \
 	%{?_with_cflags}
 
 make %{?_smp_mflags}
@@ -378,7 +444,7 @@ export QA_RPATHS=0x5
 # Strip out some dependencies
 
 cat > find-requires.sh <<'EOF'
-exec %{__find_requires} "$@" | egrep -v '^libpmix.so|libevent|libnvidia-ml'
+exec %{__find_requires} "$@" | grep -E -v '^libpmix.so|libevent|libnvidia-ml'
 EOF
 chmod +x find-requires.sh
 %global _use_internal_dependency_generator 0
@@ -388,43 +454,12 @@ rm -rf %{buildroot}
 make install DESTDIR=%{buildroot}
 make install-contrib DESTDIR=%{buildroot}
 
-install -D -m644 etc/slurmctld.service %{buildroot}/%{_unitdir}/slurmctld.service
-install -D -m644 etc/slurmd.service    %{buildroot}/%{_unitdir}/slurmd.service
-install -D -m644 etc/slurmdbd.service  %{buildroot}/%{_unitdir}/slurmdbd.service
-
-%if %{with slurmrestd}
-install -D -m644 etc/slurmrestd.service  %{buildroot}/%{_unitdir}/slurmrestd.service
-%endif
-
 # Do not package Slurm's version of libpmi on Cray systems in the usual location.
 # Cray's version of libpmi should be used. Move it elsewhere if the site still
 # wants to use it with other MPI stacks.
-%if %{with cray} || %{with cray_shasta}
+%if %{with cray_shasta}
    mkdir %{buildroot}/%{_libdir}/slurmpmi
    mv %{buildroot}/%{_libdir}/libpmi* %{buildroot}/%{_libdir}/slurmpmi
-%endif
-
-%if %{with cray}
-   install -D -m644 contribs/cray/plugstack.conf.template %{buildroot}/%{_sysconfdir}/plugstack.conf.template
-   install -D -m644 contribs/cray/slurm.conf.template %{buildroot}/%{_sysconfdir}/slurm.conf.template
-   mkdir -p %{buildroot}/opt/modulefiles/slurm
-   test -f contribs/cray/opt_modulefiles_slurm &&
-      install -D -m644 contribs/cray/opt_modulefiles_slurm %{buildroot}/opt/modulefiles/slurm/%{version}-%{rel}
-   echo -e '#%Module\nset ModulesVersion "%{version}-%{rel}"' > %{buildroot}/opt/modulefiles/slurm/.version
-%else
-   rm -f contribs/cray/opt_modulefiles_slurm
-   rm -f %{buildroot}/%{_sysconfdir}/plugstack.conf.template
-   rm -f %{buildroot}/%{_sysconfdir}/slurm.conf.template
-   rm -f %{buildroot}/%{_sbindir}/capmc_suspend
-   rm -f %{buildroot}/%{_sbindir}/capmc_resume
-   rm -f %{buildroot}/%{_sbindir}/slurmconfgen.py
-%endif
-
-%if %{with slurmsmwd}
-   install -D -m644 contribs/cray/slurmsmwd/slurmsmwd.service %{buildroot}/%{_unitdir}/slurmsmwd.service
-%else
-   rm -f %{buildroot}/%{_sbindir}/slurmsmwd
-   rm -f contribs/cray/slurmsmwd/slurmsmwd.service
 %endif
 
 install -D -m644 etc/cgroup.conf.example %{buildroot}/%{_sysconfdir}/cgroup.conf.example
@@ -454,52 +489,31 @@ rm -f %{buildroot}/%{_perlarchlibdir}/perllocal.pod
 rm -f %{buildroot}/%{_perldir}/perllocal.pod
 rm -f %{buildroot}/%{_perldir}/auto/Slurmdb/.packlist
 rm -f %{buildroot}/%{_perldir}/auto/Slurmdb/Slurmdb.bs
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/sacct
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/sacctmgr
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/salloc
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/sattach
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/sbatch
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/sbcast
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/scancel
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/scontrol
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/scrontab
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/sdiag
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/sinfo
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/slurmrestd
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/sprio
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/squeue
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/sreport
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/srun
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/sshare
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/sstat
+rm -f %{buildroot}/%{_datadir}/bash-completion/completions/strigger
 
 # Build man pages that are generated directly by the tools
 rm -f %{buildroot}/%{_mandir}/man1/sjobexitmod.1
 %{buildroot}/%{_bindir}/sjobexitmod --roff > %{buildroot}/%{_mandir}/man1/sjobexitmod.1
 rm -f %{buildroot}/%{_mandir}/man1/sjstat.1
 %{buildroot}/%{_bindir}/sjstat --roff > %{buildroot}/%{_mandir}/man1/sjstat.1
-
-# Build conditional file list for main package
-LIST=./slurm.files
-touch $LIST
-test -f %{buildroot}/%{_libexecdir}/slurm/cr_checkpoint.sh   &&
-  echo %{_libexecdir}/slurm/cr_checkpoint.sh	        >> $LIST
-test -f %{buildroot}/%{_libexecdir}/slurm/cr_restart.sh      &&
-  echo %{_libexecdir}/slurm/cr_restart.sh	        >> $LIST
-test -f %{buildroot}/%{_sbindir}/capmc_suspend		&&
-  echo %{_sbindir}/capmc_suspend			>> $LIST
-test -f %{buildroot}/%{_sbindir}/capmc_resume		&&
-  echo %{_sbindir}/capmc_resume				>> $LIST
-test -f %{buildroot}/%{_bindir}/netloc_to_topology		&&
-  echo %{_bindir}/netloc_to_topology			>> $LIST
-
-test -f %{buildroot}/opt/modulefiles/slurm/%{version}-%{rel} &&
-  echo /opt/modulefiles/slurm/%{version}-%{rel} >> $LIST
-test -f %{buildroot}/opt/modulefiles/slurm/.version &&
-  echo /opt/modulefiles/slurm/.version >> $LIST
-
-
-LIST=./example.configs
-touch $LIST
-%if %{with cray}
-   test -f %{buildroot}/%{_sbindir}/slurmconfgen.py	&&
-	echo %{_sbindir}/slurmconfgen.py		>>$LIST
-%endif
-
-# Make pkg-config file
-mkdir -p %{buildroot}/%{_libdir}/pkgconfig
-cat >%{buildroot}/%{_libdir}/pkgconfig/slurm.pc <<EOF
-includedir=%{_prefix}/include
-libdir=%{_libdir}
-
-Cflags: -I\${includedir}
-Libs: -L\${libdir} -lslurm
-Description: Slurm API
-Name: %{name}
-Version: %{version}
-EOF
 
 LIST=./pam.files
 touch $LIST
@@ -528,7 +542,7 @@ touch $LIST
 rm -rf %{buildroot}
 #############################################################################
 
-%files -f slurm.files
+%files
 %defattr(-,root,root,0755)
 %{_datadir}/doc
 %{_bindir}/s*
@@ -547,18 +561,12 @@ rm -rf %{buildroot}
 %exclude %{_mandir}/man1/sjobexit*
 %exclude %{_mandir}/man1/sjstat*
 %dir %{_libdir}/slurm/src
-%if %{with cray}
-%dir /opt/modulefiles/slurm
-%endif
+%{_datadir}/bash-completion/completions/slurm_completion.sh
 #############################################################################
 
-%files -f example.configs example-configs
+%files example-configs
 %defattr(-,root,root,0755)
 %dir %{_sysconfdir}
-%if %{with cray}
-%config %{_sysconfdir}/plugstack.conf.template
-%config %{_sysconfdir}/slurm.conf.template
-%endif
 %config %{_sysconfdir}/cgroup.conf.example
 %config %{_sysconfdir}/job_submit.lua.example
 %config %{_sysconfdir}/prolog.example
@@ -589,6 +597,12 @@ rm -rf %{buildroot}
 
 #############################################################################
 
+%files sackd
+%defattr(-,root,root)
+%{_sbindir}/sackd
+%{_unitdir}/sackd.service
+#############################################################################
+
 %files slurmctld
 %defattr(-,root,root)
 %{_sbindir}/slurmctld
@@ -611,7 +625,7 @@ rm -rf %{buildroot}
 
 %files libpmi
 %defattr(-,root,root)
-%if %{with cray} || %{with cray_shasta}
+%if %{with cray_shasta}
 %{_libdir}/slurmpmi/*
 %else
 %{_libdir}/libpmi*
@@ -665,22 +679,62 @@ rm -rf %{buildroot}
 %endif
 #############################################################################
 
-%if %{with slurmsmwd}
-%files slurmsmwd
-%{_sbindir}/slurmsmwd
-%{_unitdir}/slurmsmwd.service
-%endif
-#############################################################################
-
 %pre
 
 %post
 /sbin/ldconfig
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,sacct}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,sacctmgr}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,salloc}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,sattach}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,sbatch}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,sbcast}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,scancel}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,scontrol}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,scrontab}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,sdiag}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,sinfo}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,slurmrestd}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,sprio}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,squeue}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,sreport}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,srun}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,sshare}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,sstat}
+ln -sf %{_datadir}/bash-completion/completions/{slurm_completion.sh,strigger}
 
 %preun
 
 %postun
 /sbin/ldconfig
+if [ $1 -eq 0 ]; then
+	rm -f %{_datadir}/bash-completion/completions/sacct
+	rm -f %{_datadir}/bash-completion/completions/sacctmgr
+	rm -f %{_datadir}/bash-completion/completions/salloc
+	rm -f %{_datadir}/bash-completion/completions/sattach
+	rm -f %{_datadir}/bash-completion/completions/sbatch
+	rm -f %{_datadir}/bash-completion/completions/sbcast
+	rm -f %{_datadir}/bash-completion/completions/scancel
+	rm -f %{_datadir}/bash-completion/completions/scontrol
+	rm -f %{_datadir}/bash-completion/completions/scrontab
+	rm -f %{_datadir}/bash-completion/completions/sdiag
+	rm -f %{_datadir}/bash-completion/completions/sinfo
+	rm -f %{_datadir}/bash-completion/completions/slurmrestd
+	rm -f %{_datadir}/bash-completion/completions/sprio
+	rm -f %{_datadir}/bash-completion/completions/squeue
+	rm -f %{_datadir}/bash-completion/completions/sreport
+	rm -f %{_datadir}/bash-completion/completions/srun
+	rm -f %{_datadir}/bash-completion/completions/sshare
+	rm -f %{_datadir}/bash-completion/completions/sstat
+	rm -f %{_datadir}/bash-completion/completions/strigger
+fi
+
+%post sackd
+%systemd_post sackd.service
+%preun sackd
+%systemd_preun sackd.service
+%postun sackd
+%systemd_postun_with_restart sackd.service
 
 %post slurmctld
 %systemd_post slurmctld.service
@@ -702,3 +756,8 @@ rm -rf %{buildroot}
 %systemd_preun slurmdbd.service
 %postun slurmdbd
 %systemd_postun_with_restart slurmdbd.service
+%if %{defined patch}
+%changelog
+* %(date "+%a %b %d %Y") %{?packager} - %{version}-%{release}
+- Includes patch: %{patch}
+%endif
