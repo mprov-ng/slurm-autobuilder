@@ -1,7 +1,7 @@
 name: Autobuild on copr.
 on:
   schedule:
-    - cron: "00/10 * * * *"
+    - cron: "14 3 * * *"
 jobs:
   build:
     runs-on: ubuntu-latest
