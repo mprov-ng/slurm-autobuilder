@@ -5,3 +5,6 @@ This auto builder will build for RHEL 8 and 9 with EPEL repos.  It uses the foll
 
 ## Repo config
 If you want to use this repo, you can run this command: `dnf copr enable mprov/slurm`
+
+## Special Requests
+If you need a specific older version of slurm, a tag can be added to this repo which will trigger a build of that version in copr.  Tags must match the tags from the slurm github repo at https://github.com/SchedMD/slurm/tags If you would like to request this be built, please open an issue with the version requested if it doesn't already exist in the copr repo.
