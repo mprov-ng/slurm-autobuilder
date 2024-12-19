@@ -1,3 +1,4 @@
+name: Tagged auto builder.
 on:
   push:
     # Pattern matched against refs/tags
@@ -6,6 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    steps:
     - 
       name: Checkout repo
       uses: actions/checkout@v3
