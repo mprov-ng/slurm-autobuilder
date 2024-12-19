@@ -1,0 +1,15 @@
+name: Autobuild on copr.
+on:
+  schedule:
+    - cron: 00/10 * * *
+  jobs:
+    build:
+      - 
+        name: Checkout repo
+        uses: actions/checkout@v3
+      
+      - 
+        name: Run update script
+        run: ./update-slurm-packages.sh
+
+        
