@@ -1,6 +1,6 @@
 Name:		slurm
 Version:	24.11.0
-%define rel	1
+%define rel	2
 %if %{defined patch} && %{undefined extraver}
 %define extraver .patched
 %endif
@@ -174,6 +174,7 @@ BuildRequires: numactl-devel
 
 %if %{with pmix} && "%{_with_pmix}" == "--with-pmix"
 BuildRequires: pmix
+BuildRequires: pmix-devel
 %global pmix_version %(rpm -q pmix --qf "%{RPMTAG_VERSION}")
 %endif
 
